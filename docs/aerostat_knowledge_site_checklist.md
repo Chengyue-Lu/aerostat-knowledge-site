@@ -30,12 +30,12 @@
 - [x] 建立 `docs/` 目录
 - [x] 建立 `infra/` 目录
 - [x] 建立 `scripts/` 目录
-- [ ] 初始化 Git 仓库
+- [x] 初始化 Git 仓库
 - [x] 创建 `.gitignore`
 - [x] 创建 `README.md`
 - [x] 将总路线计划文件放入 `docs/`
 - [x] 将本 Checklist 文件放入 `docs/`
-- [ ] 建立 `.env.example`
+- [x] 建立 `.env.example`
 - [ ] 固定 `~/data/docs_raw`
 - [ ] 固定 `~/data/docs_processed`
 - [ ] 固定 `~/data/qdrant`
@@ -46,29 +46,29 @@
 
 ## 2. 前端骨架
 
-- [ ] 在 `frontend/` 初始化 React + Vite 项目
-- [ ] 跑通前端开发服务器
-- [ ] 建立首页 `/`
-- [ ] 建立知识库页面 `/knowledge`
-- [ ] 建立问答页面 `/chat`
-- [ ] 做出最小导航栏
-- [ ] 首页写清“浮空器领域知识网站”定位
-- [ ] 首页放置进入知识库与问答页入口
-- [ ] 知识库页先放假数据列表
-- [ ] 问答页先放输入框与回答区域骨架
+- [x] 在 `frontend/` 初始化 React + Vite 项目
+- [x] 跑通前端开发服务器
+- [x] 建立首页 `/`
+- [x] 建立知识库页面 `/knowledge`
+- [x] 建立问答页面 `/chat`
+- [x] 做出最小导航栏
+- [x] 首页写清“浮空器领域知识网站”定位
+- [x] 首页放置进入知识库与问答页入口
+- [x] 知识库页先放假数据列表
+- [x] 问答页先放输入框与回答区域骨架
 
 ---
 
 ## 3. 后端骨架
 
-- [ ] 在 `backend/` 初始化 Python 虚拟环境
-- [ ] 安装 FastAPI 与运行依赖
-- [ ] 建立 `GET /health`
-- [ ] 建立 `GET /documents`
-- [ ] 建立 `POST /chat`
-- [ ] 跑通后端开发服务器
-- [ ] 浏览器或前端可成功访问 `/health`
-- [ ] 前端可成功联通后端 API
+- [x] 在 `backend/` 初始化 Python 虚拟环境
+- [x] 安装 FastAPI 与运行依赖
+- [x] 建立 `GET /health`
+- [x] 建立 `GET /documents`
+- [x] 建立 `POST /chat`
+- [x] 跑通后端开发服务器
+- [x] 浏览器或前端可成功访问 `/health`
+- [x] 前端可成功联通后端 API
 
 ---
 

@@ -11,6 +11,17 @@ function formatError(error) {
   return "Request failed";
 }
 
+function formatDate(value) {
+  if (!value) {
+    return "";
+  }
+
+  return new Intl.DateTimeFormat("zh-CN", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
+}
+
 export default function KnowledgePage() {
   const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -53,14 +64,14 @@ export default function KnowledgePage() {
     <section>
       <h2>Knowledge Base</h2>
       <p>
-        这里用于展示浮空器知识库中的文档条目。当前页面已接入后端
-        /documents 占位接口，用于验证第一版原型的数据展示链路。
+        这里用于展示浮空器知识库中的文档元数据。当前页面已接入后端
+        /documents 接口，并从 SQLite 读取文档列表。
       </p>
 
       <section className="card">
         <div className="section-heading">
-          <h3>Placeholder Documents</h3>
-          <span className="badge">占位数据</span>
+          <h3>Documents</h3>
+          <span className="badge">SQLite</span>
         </div>
 
         {loading ? <p>Loading documents...</p> : null}
@@ -75,17 +86,22 @@ export default function KnowledgePage() {
                 <strong>{document.title}</strong>
                 <span>分类：{document.category}</span>
                 <span>状态：{document.status}</span>
+                {document.filename ? <span>文件名：{document.filename}</span> : null}
+                <span>分块数：{document.chunk_count ?? 0}</span>
+                {document.created_at ? (
+                  <span>创建时间：{formatDate(document.created_at)}</span>
+                ) : null}
               </li>
             ))}
           </ul>
         ) : null}
 
         {!loading && !error && documents.length === 0 ? (
-          <p>暂无占位文档。</p>
+          <p>暂无文档元数据。</p>
         ) : null}
       </section>
 
-      <p className="muted">暂未接入真实文档数据。</p>
+      <p className="muted">当前阶段仅持久化文档元数据，暂未接入文件上传或解析。</p>
     </section>
   );
 }
