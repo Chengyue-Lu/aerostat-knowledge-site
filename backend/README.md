@@ -35,5 +35,43 @@ Backend enables development CORS for these frontend origins:
 ```bash
 curl http://127.0.0.1:8000/health
 curl http://127.0.0.1:8000/documents
-curl -X POST http://127.0.0.1:8000/chat
+curl -X POST http://127.0.0.1:8000/chat \
+  -H "Content-Type: application/json" \
+  -d '{"question":"系留气球有哪些典型应用场景？"}'
+```
+
+## Placeholder API responses
+
+`GET /health`:
+
+```json
+{"status": "ok"}
+```
+
+`GET /documents` returns a small hardcoded list:
+
+```json
+[
+  {
+    "id": "doc-001",
+    "title": "浮空器基础概念占位文档",
+    "category": "基础知识",
+    "status": "placeholder"
+  }
+]
+```
+
+`POST /chat` accepts:
+
+```json
+{"question": "系留气球有哪些典型应用场景？"}
+```
+
+It returns a placeholder reply:
+
+```json
+{
+  "reply": "已收到你的问题：...",
+  "sources": []
+}
 ```

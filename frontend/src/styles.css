@@ -53,6 +53,82 @@ body {
   background: #ffffff;
 }
 
+.section-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+
+.section-heading h3 {
+  margin: 0;
+}
+
+.badge {
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  color: #35530a;
+  background: #e8f5c8;
+  font-size: 0.85rem;
+}
+
+.document-list {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0;
+  margin: 1rem 0 0;
+  list-style: none;
+}
+
+.document-item {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.85rem;
+  border: 1px solid #ececec;
+  border-radius: 8px;
+  background: #fbfbfb;
+}
+
+.chat-form {
+  display: grid;
+  gap: 0.75rem;
+  max-width: 720px;
+  margin-top: 1rem;
+}
+
+.chat-form label {
+  font-weight: 600;
+}
+
+.chat-form textarea {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid #cfcfcf;
+  border-radius: 8px;
+  font: inherit;
+  resize: vertical;
+}
+
+.chat-form button {
+  width: fit-content;
+  padding: 0.65rem 1rem;
+  border: 0;
+  border-radius: 8px;
+  color: #ffffff;
+  background: #0f62fe;
+  font: inherit;
+  cursor: pointer;
+}
+
+.chat-form button:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.muted {
+  color: #666666;
+}
+
 .error {
   color: #b42318;
 }
