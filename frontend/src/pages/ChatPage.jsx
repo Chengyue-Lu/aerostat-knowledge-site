@@ -1,8 +1,8 @@
 export default function ChatPage() {
   return (
-    <div>
+    <section>
       <h2>Chat</h2>
       <p>This page is reserved for Q&A interaction.</p>
-    </div>
+    </section>
   );
 }

@@ -1,5 +1,5 @@
 # Backend (FastAPI Minimal)
-
+<!-- markdownlint-disable -->
 ## Activate virtual environment
 
 ```bash

@@ -20,14 +20,17 @@ app.add_middleware(
 
 @app.get("/health")
 def health() -> dict[str, str]:
+    """Basic service health endpoint for frontend connectivity checks."""
     return {"status": "ok"}
 
 
 @app.get("/documents")
 def list_documents() -> list:
+    """Return placeholder document list for early frontend integration."""
     return []
 
 
 @app.post("/chat")
 def chat() -> dict[str, str]:
+    """Return placeholder chat reply for minimal end-to-end flow."""
     return {"reply": "hello"}

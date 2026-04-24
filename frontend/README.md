@@ -25,7 +25,22 @@ Default URL: http://localhost:5173
 
 The home page requests `${API_BASE_URL}/health`.
 
-Current `API_BASE_URL` is defined in `src/config.js` as:
+Current `API_BASE_URL` is resolved in `src/config.js`:
+
+- Prefer `import.meta.env.VITE_API_BASE_URL`
+- Fallback to `http://localhost:8000` when env is not set
+
+## Configure VITE_API_BASE_URL
+
+Create `.env.local` in `frontend/`:
+
+```bash
+VITE_API_BASE_URL=http://100.122.3.8:8000
+```
+
+Then restart the dev server.
+
+Example runtime target:
 
 - http://100.122.3.8:8000
 

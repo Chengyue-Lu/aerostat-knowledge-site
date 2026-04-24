@@ -3,6 +3,14 @@ import { API_BASE_URL } from "../config";
 
 const HEALTH_URL = `${API_BASE_URL}/health`;
 
+function formatError(error) {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return "Request failed";
+}
+
 export default function HealthCheck() {
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState("unknown");
@@ -25,7 +33,7 @@ export default function HealthCheck() {
       } catch (err) {
         if (!isCancelled) {
           setStatus("down");
-          setError(err instanceof Error ? err.message : "Request failed");
+          setError(formatError(err));
         }
       } finally {
         if (!isCancelled) {
