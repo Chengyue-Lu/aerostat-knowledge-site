@@ -18,7 +18,7 @@ Default URL: http://localhost:5173
 ## Pages
 
 - `/`: 首页，保留 Backend Health 卡片并请求 `${API_BASE_URL}/health`。
-- `/knowledge`: 知识库占位页，请求 `${API_BASE_URL}/documents` 并渲染占位文档列表。
+- `/knowledge`: 知识库页，请求 `${API_BASE_URL}/documents` 并渲染文档元数据列表，支持上传 `.txt` / `.md` / `.pdf` 原始文档。
 - `/chat`: 问答占位页，提交问题到 `${API_BASE_URL}/chat` 并展示返回的 `reply`。
 
 ## Backend health check
@@ -26,6 +26,14 @@ Default URL: http://localhost:5173
 Home page requests `${API_BASE_URL}/health`.
 
 Knowledge page requests `${API_BASE_URL}/documents`.
+
+Knowledge page uploads selected `.txt` / `.md` / `.pdf` files to:
+
+```text
+${API_BASE_URL}/documents/upload
+```
+
+After a successful upload, the page refreshes the document list.
 
 Chat page posts JSON to `${API_BASE_URL}/chat`:
 
