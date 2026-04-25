@@ -40,3 +40,9 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     reply: str
     sources: list[DocumentRead]
+
+
+class ParseResult(BaseModel):
+    document_id: int
+    parsed_markdown_path: str
+    content: str

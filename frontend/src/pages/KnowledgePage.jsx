@@ -28,6 +28,16 @@ function hasSupportedExtension(file) {
   return name.endsWith(".txt") || name.endsWith(".md") || name.endsWith(".pdf");
 }
 
+function canParseDocument(document) {
+  const fileExt = document.file_ext?.toLowerCase();
+  const filename = document.filename?.toLowerCase() || "";
+  const isPdf = fileExt === ".pdf" || filename.endsWith(".pdf");
+  return (
+    isPdf &&
+    (document.parse_status === "NOT_PARSED" || document.parse_status === "FAILED")
+  );
+}
+
 export default function KnowledgePage() {
   const fileInputRef = useRef(null);
   const [documents, setDocuments] = useState([]);
@@ -37,6 +47,9 @@ export default function KnowledgePage() {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const [uploadMessage, setUploadMessage] = useState("");
+  const [parsingDocumentId, setParsingDocumentId] = useState(null);
+  const [parseMessage, setParseMessage] = useState("");
+  const [parseError, setParseError] = useState("");
 
   async function fetchDocuments() {
     setLoading(true);
@@ -134,6 +147,30 @@ export default function KnowledgePage() {
     }
   }
 
+  async function handleParse(documentId) {
+    setParseError("");
+    setParseMessage("");
+    setParsingDocumentId(documentId);
+
+    try {
+      const response = await fetch(`${DOCUMENTS_URL}/${documentId}/parse`, {
+        method: "POST",
+      });
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data.detail || `HTTP ${response.status}`);
+      }
+
+      setParseMessage(`已提交解析任务：${data.title || documentId}`);
+      await fetchDocuments();
+    } catch (err) {
+      setParseError(formatError(err));
+    } finally {
+      setParsingDocumentId(null);
+    }
+  }
+
   return (
     <section>
       <h2>Knowledge Base</h2>
@@ -169,6 +206,8 @@ export default function KnowledgePage() {
 
         {uploadError ? <p className="error">上传失败：{uploadError}</p> : null}
         {uploadMessage ? <p className="success">{uploadMessage}</p> : null}
+        {parseError ? <p className="error">解析启动失败：{parseError}</p> : null}
+        {parseMessage ? <p className="success">{parseMessage}</p> : null}
       </section>
 
       <section className="card">
@@ -198,6 +237,17 @@ export default function KnowledgePage() {
                 {document.created_at ? (
                   <span>创建时间：{formatDate(document.created_at)}</span>
                 ) : null}
+                {canParseDocument(document) ? (
+                  <div className="document-actions">
+                    <button
+                      type="button"
+                      onClick={() => handleParse(document.id)}
+                      disabled={parsingDocumentId === document.id}
+                    >
+                      {parsingDocumentId === document.id ? "Starting..." : "Parse"}
+                    </button>
+                  </div>
+                ) : null}
               </li>
             ))}
           </ul>
@@ -208,7 +258,7 @@ export default function KnowledgePage() {
         ) : null}
       </section>
 
-      <p className="muted">当前阶段仅注册原始文件并持久化元数据，暂未接入解析或切分。</p>
+      <p className="muted">PDF 解析会在后台运行，列表刷新后可查看解析状态。</p>
     </section>
   );
 }

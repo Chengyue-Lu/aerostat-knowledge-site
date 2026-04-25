@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import Depends, FastAPI, File, HTTPException, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -6,9 +7,11 @@ from sqlalchemy import inspect, select, text
 from sqlalchemy.orm import Session
 
 from .database import Base, SessionLocal, engine, get_db
+from .mineru import get_document_output_dir
 from .models import Document
+from .parse_queue import enqueue_parse, start_parse_worker
 from .reconcile import reconcile_document_files
-from .schemas import ChatRequest, ChatResponse, DocumentCreate, DocumentRead
+from .schemas import ChatRequest, ChatResponse, DocumentCreate, DocumentRead, ParseResult
 from .storage import save_raw_document_file
 
 
@@ -85,6 +88,7 @@ def ensure_document_columns() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_database()
+    start_parse_worker()
     yield
 
 
@@ -171,6 +175,72 @@ def upload_document(
 def reconcile_dry_run(db: Session = Depends(get_db)) -> dict[str, list[dict]]:
     """Check database file references against local storage without modifying data."""
     return reconcile_document_files(db)
+
+
+@app.post("/documents/{document_id}/parse", response_model=DocumentRead)
+def parse_document(
+    document_id: int,
+    db: Session = Depends(get_db),
+) -> Document:
+    """Queue MinerU parsing for an uploaded PDF document."""
+    document = db.get(Document, document_id)
+    if document is None:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    if document.parse_status in {"QUEUED", "PARSING"}:
+        return document
+
+    if not document.storage_path:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Document has no storage_path and cannot be parsed.",
+        )
+
+    storage_path = Path(document.storage_path).expanduser()
+    if not storage_path.exists():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Original file not found: {document.storage_path}",
+        )
+
+    file_ext = (document.file_ext or storage_path.suffix).lower()
+    if file_ext != ".pdf":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only PDF documents can be parsed by MinerU in this version.",
+        )
+
+    document.parse_status = "QUEUED"
+    document.parse_output_dir = str(get_document_output_dir(document_id))
+    document.parsed_markdown_path = None
+    document.parse_error = None
+    db.commit()
+    db.refresh(document)
+
+    enqueue_parse(document_id)
+    return document
+
+
+@app.get("/documents/{document_id}/parse-result", response_model=ParseResult)
+def get_parse_result(document_id: int, db: Session = Depends(get_db)) -> ParseResult:
+    """Return parsed Markdown content for a document when MinerU has produced it."""
+    document = db.get(Document, document_id)
+    if document is None:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    if not document.parsed_markdown_path:
+        raise HTTPException(status_code=404, detail="Parsed Markdown path not found")
+
+    markdown_path = Path(document.parsed_markdown_path).expanduser()
+    if not markdown_path.exists():
+        raise HTTPException(status_code=404, detail="Parsed Markdown file not found")
+
+    content = markdown_path.read_text(encoding="utf-8", errors="replace")
+    return ParseResult(
+        document_id=document.id,
+        parsed_markdown_path=document.parsed_markdown_path,
+        content=content,
+    )
 
 
 @app.get("/documents/{document_id}", response_model=DocumentRead)

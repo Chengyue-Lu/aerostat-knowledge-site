@@ -1,5 +1,32 @@
 # Changelog
 
+## 2026-04-26
+
+### Backend
+
+- Add MinerU subprocess integration without installing MinerU into `backend/.venv`.
+- Add MinerU configuration environment variables:
+  - `MINERU_BIN`
+  - `MINERU_OUTPUT_DIR`
+  - `MINERU_BACKEND`
+  - `MINERU_TIMEOUT_SECONDS`
+- Add `POST /documents/{document_id}/parse` to queue PDF parsing.
+- Add an in-process single worker FIFO parse queue so only one MinerU task runs at a time.
+- Track parse states `QUEUED`, `PARSING`, `PARSED`, and `FAILED`.
+- Run MinerU with `CUDA_VISIBLE_DEVICES=0` unless already configured.
+- Register parsed Markdown output in `parsed_markdown_path`.
+- Add `GET /documents/{document_id}/parse-result` to return parsed Markdown content.
+
+### Frontend
+
+- Show a Parse button for PDF documents with `parse_status` `NOT_PARSED` or `FAILED`.
+- Submit parse requests from the Knowledge page and refresh the document list.
+
+### Docs
+
+- Document MinerU environment variables, parse queue behavior, and parse-result curl examples.
+- Update project status to “MinerU parsing integration”.
+
 ## 2026-04-25
 
 ### Backend

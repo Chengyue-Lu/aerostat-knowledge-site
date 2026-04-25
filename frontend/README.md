@@ -35,6 +35,16 @@ ${API_BASE_URL}/documents/upload
 
 After a successful upload, the page refreshes the document list.
 
+For PDF documents with `parse_status` `NOT_PARSED` or `FAILED`, the Knowledge
+page shows a Parse button. It posts to:
+
+```text
+${API_BASE_URL}/documents/{document_id}/parse
+```
+
+The request only queues a backend MinerU task. The page refreshes the list after
+submission; it does not show a progress bar.
+
 Chat page posts JSON to `${API_BASE_URL}/chat`:
 
 ```json

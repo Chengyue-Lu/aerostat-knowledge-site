@@ -36,6 +36,11 @@ Example local environment:
 ```bash
 export DATABASE_URL=sqlite:///./data/aerostat_knowledge.db
 export DOCS_RAW_DIR=./data/docs_raw
+export MINERU_BIN=mineru
+export MINERU_OUTPUT_DIR=./data/mineru_outputs
+export MINERU_TIMEOUT_SECONDS=1800
+# Optional. Leave unset to use MinerU default GPU/default route.
+# export MINERU_BACKEND=pipeline
 ```
 
 `backend/.env.example` is provided as a reference for local configuration.
@@ -73,6 +78,50 @@ with the same original name. The database keeps:
 
 This stage registers files and checks local consistency only. It does not parse
 text, split chunks, run MinerU, run embeddings, or build an index.
+
+## MinerU PDF parsing
+
+The backend integrates MinerU through `subprocess`. MinerU is not installed into
+`backend/.venv`; set `MINERU_BIN` to the CLI path from the independent MinerU
+environment when needed.
+
+Environment variables:
+
+- `MINERU_BIN`: MinerU CLI path. Default: `mineru`
+- `MINERU_OUTPUT_DIR`: parse output root. Default: `backend/data/mineru_outputs/`
+- `MINERU_BACKEND`: optional backend argument. When set, backend calls `mineru ... -b <value>`. When unset, no `-b` is passed.
+- `MINERU_TIMEOUT_SECONDS`: subprocess timeout. Default: `1800`
+
+`POST /documents/{document_id}/parse` queues a PDF parse task and returns
+immediately. It does not wait for MinerU to finish. The backend uses one
+in-process FIFO worker, so only one document is parsed at a time. Additional
+parse requests are marked `QUEUED` and processed sequentially.
+
+The queue is intentionally local and non-durable in this first version. If the
+backend process restarts, queued in-memory tasks should be submitted again.
+
+Parse status values used by this version:
+
+- `NOT_PARSED`: uploaded or registered but not parsed
+- `QUEUED`: waiting for the single MinerU worker
+- `PARSING`: currently running MinerU
+- `PARSED`: Markdown artifact was found and registered
+- `FAILED`: MinerU failed, timed out, or no Markdown artifact was found
+
+MinerU command shape:
+
+```bash
+<MINERU_BIN> -p <storage_path> -o <document_output_dir>
+```
+
+When `MINERU_BACKEND` is set:
+
+```bash
+<MINERU_BIN> -p <storage_path> -o <document_output_dir> -b <MINERU_BACKEND>
+```
+
+The worker sets `CUDA_VISIBLE_DEVICES=0` unless it already exists in the backend
+process environment.
 
 ## Reconcile dry-run
 
@@ -116,6 +165,10 @@ curl -X POST http://127.0.0.1:8000/documents \
 curl -X POST http://127.0.0.1:8000/documents/upload \
   -F "file=@./sample.md"
 curl http://127.0.0.1:8000/documents/1
+# Use a PDF document id returned by /documents/upload.
+curl -X POST http://127.0.0.1:8000/documents/4/parse
+curl http://127.0.0.1:8000/documents/4
+curl http://127.0.0.1:8000/documents/4/parse-result
 curl http://127.0.0.1:8000/admin/reconcile/dry-run
 curl -X POST http://127.0.0.1:8000/chat \
   -H "Content-Type: application/json" \
@@ -216,6 +269,48 @@ Example response:
 
 `GET /documents/{document_id}` returns one document metadata record or `404`
 when the id does not exist.
+
+`POST /documents/{document_id}/parse` queues MinerU parsing for a PDF document:
+
+```bash
+curl -X POST http://127.0.0.1:8000/documents/4/parse
+```
+
+Example immediate response:
+
+```json
+{
+  "id": 4,
+  "title": "sample",
+  "status": "UPLOADED",
+  "filename": "sample.pdf",
+  "file_ext": ".pdf",
+  "parse_status": "QUEUED",
+  "parse_output_dir": "/path/to/backend/data/mineru_outputs/4",
+  "parsed_markdown_path": null,
+  "parse_error": null
+}
+```
+
+Poll `GET /documents/{document_id}` to observe `QUEUED`, `PARSING`, `PARSED`, or
+`FAILED`.
+
+`GET /documents/{document_id}/parse-result` returns parsed Markdown content when
+`parsed_markdown_path` exists:
+
+```bash
+curl http://127.0.0.1:8000/documents/4/parse-result
+```
+
+Example response:
+
+```json
+{
+  "document_id": 4,
+  "parsed_markdown_path": "/path/to/backend/data/mineru_outputs/4/result.md",
+  "content": "# Parsed markdown..."
+}
+```
 
 `GET /admin/reconcile/dry-run` returns file consistency results:
 
