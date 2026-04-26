@@ -98,7 +98,16 @@ in-process FIFO worker, so only one document is parsed at a time. Additional
 parse requests are marked `QUEUED` and processed sequentially.
 
 The queue is intentionally local and non-durable in this first version. If the
-backend process restarts, queued in-memory tasks should be submitted again.
+backend process restarts, queued in-memory tasks are lost. On startup, the
+backend marks any persisted `QUEUED` or `PARSING` documents as `FAILED` and
+writes this `parse_error`:
+
+```text
+Parser task was interrupted by backend restart. Please submit parse again.
+```
+
+Users can submit parsing again through the same `POST /documents/{document_id}/parse`
+endpoint.
 
 Parse status values used by this version:
 

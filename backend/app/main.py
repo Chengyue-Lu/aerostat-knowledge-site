@@ -15,6 +15,10 @@ from .schemas import ChatRequest, ChatResponse, DocumentCreate, DocumentRead, Pa
 from .storage import save_raw_document_file
 
 
+STALE_PARSE_ERROR = (
+    "Parser task was interrupted by backend restart. Please submit parse again."
+)
+
 SEED_DOCUMENTS = [
     {
         "title": "浮空器基础概念占位文档",
@@ -46,6 +50,7 @@ SEED_DOCUMENTS = [
 def init_database() -> None:
     Base.metadata.create_all(bind=engine)
     ensure_document_columns()
+    recover_stale_parse_tasks()
 
     with SessionLocal() as db:
         has_documents = db.scalars(select(Document.id).limit(1)).first() is not None
@@ -83,6 +88,21 @@ def ensure_document_columns() -> None:
         for column_name, statement in expected_columns.items():
             if column_name not in column_names:
                 connection.execute(text(statement))
+
+
+def recover_stale_parse_tasks() -> None:
+    with SessionLocal() as db:
+        stale_documents = list(
+            db.scalars(select(Document).where(Document.parse_status.in_(["QUEUED", "PARSING"])))
+        )
+        if not stale_documents:
+            return
+
+        for document in stale_documents:
+            document.parse_status = "FAILED"
+            document.parse_error = STALE_PARSE_ERROR
+
+        db.commit()
 
 
 @asynccontextmanager
