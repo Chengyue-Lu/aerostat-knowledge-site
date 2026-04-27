@@ -74,8 +74,9 @@ with the same original name. The database keeps:
 - `parsed_markdown_path`: reserved parsed Markdown artifact path
 - `parse_error`: reserved parser error text
 
-This stage registers files and checks local consistency only. It does not parse
-text, split chunks, run MinerU, run embeddings, or build an index.
+This stage registers files and checks local consistency only. Markdown chunks
+are built later from MinerU parsed Markdown. The backend still does not run
+embeddings or build a vector index.
 
 ## MinerU PDF parsing
 
@@ -138,6 +139,52 @@ When `MINERU_BACKEND` is set:
 
 The worker sets `CUDA_VISIBLE_DEVICES=0` unless it already exists in the backend
 process environment.
+
+## Markdown chunk building
+
+The backend can build structured SQLite chunks from a parsed Markdown artifact.
+This is a synchronous first version and does not use a background queue.
+
+Chunk table fields:
+
+- `document_id`: source document id
+- `chunk_index`: zero-based order within the document
+- `heading_path`: Markdown heading path joined with ` > `
+- `heading_text`: nearest section heading
+- `content`: chunk text
+- `char_count`: character count
+- `token_estimate`: approximate token count using a simple character heuristic
+- `source_path`: parsed Markdown path used to build the chunk
+- `created_at`: chunk creation time
+
+Chunking strategy:
+
+- read `Document.parsed_markdown_path`
+- normalize line endings and collapse excessive blank lines
+- remove MinerU image links and `<details>` OCR blocks while keeping normal text
+- split sections by Markdown headings `#` through `####`
+- keep heading text and heading path metadata
+- for paper-like Markdown, start at `Abstract` when present
+- skip low-value metadata sections such as `article info`, `Contents`, `References`, and `Acknowledgements`
+- keep the abstract as one chunk when it fits under `max_chars`
+- accumulate paragraphs with default `target_chars=1000`
+- keep chunks below `max_chars=1600` where possible
+- use `overlap_chars=200` only when a complete trailing paragraph fits
+- hard-split only when a single paragraph exceeds `max_chars`
+
+`POST /documents/{document_id}/chunks/build` requires:
+
+- document exists
+- `parse_status` is `PARSED`
+- `parsed_markdown_path` is set and points to an existing file
+
+The endpoint deletes previous chunks for that document, writes the rebuilt
+chunks, updates `Document.chunk_count`, and returns the updated document.
+
+`GET /documents/{document_id}/chunks` returns chunks ordered by `chunk_index`.
+
+`DELETE /documents/{document_id}/chunks` removes all chunks for the document and
+sets `Document.chunk_count` back to `0`.
 
 ## Reconcile dry-run
 
@@ -206,6 +253,9 @@ curl http://127.0.0.1:8000/documents/1
 curl -X POST http://127.0.0.1:8000/documents/4/parse
 curl http://127.0.0.1:8000/documents/4
 curl http://127.0.0.1:8000/documents/4/parse-result
+curl -X POST http://127.0.0.1:8000/documents/4/chunks/build
+curl http://127.0.0.1:8000/documents/4/chunks
+curl -X DELETE http://127.0.0.1:8000/documents/4/chunks
 curl http://127.0.0.1:8000/admin/reconcile/dry-run
 curl -X POST http://127.0.0.1:8000/chat \
   -H "Content-Type: application/json" \
@@ -304,6 +354,46 @@ Example response:
   "created_at": "2026-04-25T10:00:00",
   "updated_at": "2026-04-25T10:00:00"
 }
+```
+
+`POST /documents/{document_id}/chunks/build` rebuilds chunks from parsed
+Markdown:
+
+```bash
+curl -X POST http://127.0.0.1:8000/documents/4/chunks/build
+```
+
+Example response is the updated document metadata, including `chunk_count`.
+
+`GET /documents/{document_id}/chunks` returns chunk records:
+
+```bash
+curl http://127.0.0.1:8000/documents/4/chunks
+```
+
+Example response:
+
+```json
+[
+  {
+    "id": 1,
+    "document_id": 4,
+    "chunk_index": 0,
+    "heading_path": "Introduction",
+    "heading_text": "Introduction",
+    "content": "# Introduction\n\n...",
+    "char_count": 934,
+    "token_estimate": 234,
+    "source_path": "/path/to/result.md",
+    "created_at": "2026-04-27T10:00:00"
+  }
+]
+```
+
+`DELETE /documents/{document_id}/chunks` removes chunks for one document:
+
+```bash
+curl -X DELETE http://127.0.0.1:8000/documents/4/chunks
 ```
 
 `GET /documents/{document_id}` returns one document metadata record or `404`

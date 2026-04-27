@@ -2,6 +2,25 @@
 
 ## 2026-04-27
 
+### Backend
+
+- Add `DocumentChunk` SQLite model for parsed Markdown chunks.
+- Add lightweight Markdown chunking in `backend/app/chunking.py`.
+- Make chunk building paper-aware by starting at Abstract when present, skipping article metadata, contents, references, and acknowledgements, and dropping MinerU image/detail noise.
+- Add `POST /documents/{document_id}/chunks/build` to rebuild chunks from parsed Markdown and update `Document.chunk_count`.
+- Add `GET /documents/{document_id}/chunks` to list chunks in `chunk_index` order.
+- Add `DELETE /documents/{document_id}/chunks` to clear chunks and reset `chunk_count`.
+
+### Frontend
+
+- Add a Build Chunks action for parsed documents on the Knowledge page.
+- Show chunk build success and error feedback without introducing extra state management.
+
+### Docs
+
+- Document Markdown chunk fields, splitting strategy, and curl examples.
+- Update project status to “Markdown chunk building”.
+
 ### Fixes
 
 - Fix parse elapsed time display by treating backend timestamps without timezone as UTC.

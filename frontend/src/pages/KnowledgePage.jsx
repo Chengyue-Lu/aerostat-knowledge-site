@@ -85,6 +85,10 @@ function canParseDocument(document) {
   );
 }
 
+function canBuildChunks(document) {
+  return document.parse_status === "PARSED";
+}
+
 function isRunningParse(document) {
   return RUNNING_PARSE_STATUSES.has(document.parse_status);
 }
@@ -104,8 +108,11 @@ export default function KnowledgePage() {
   const [uploadMessage, setUploadMessage] = useState("");
   const [parsingDocumentId, setParsingDocumentId] = useState(null);
   const [deletingDocumentId, setDeletingDocumentId] = useState(null);
+  const [buildingChunksDocumentId, setBuildingChunksDocumentId] = useState(null);
   const [parseMessage, setParseMessage] = useState("");
   const [parseError, setParseError] = useState("");
+  const [chunkMessage, setChunkMessage] = useState("");
+  const [chunkError, setChunkError] = useState("");
   const [deleteError, setDeleteError] = useState("");
   const [tick, setTick] = useState(Date.now());
 
@@ -274,6 +281,30 @@ export default function KnowledgePage() {
     }
   }
 
+  async function handleBuildChunks(documentId) {
+    setChunkError("");
+    setChunkMessage("");
+    setBuildingChunksDocumentId(documentId);
+
+    try {
+      const response = await fetch(`${DOCUMENTS_URL}/${documentId}/chunks/build`, {
+        method: "POST",
+      });
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data.detail || `HTTP ${response.status}`);
+      }
+
+      setChunkMessage(`已构建 chunks：${data.chunk_count ?? 0}`);
+      await fetchDocuments({ showLoading: false });
+    } catch (err) {
+      setChunkError(formatError(err));
+    } finally {
+      setBuildingChunksDocumentId(null);
+    }
+  }
+
   return (
     <section>
       <h2>Knowledge Base</h2>
@@ -311,6 +342,8 @@ export default function KnowledgePage() {
         {uploadMessage ? <p className="success">{uploadMessage}</p> : null}
         {parseError ? <p className="error">解析启动失败：{parseError}</p> : null}
         {parseMessage ? <p className="success">{parseMessage}</p> : null}
+        {chunkError ? <p className="error">构建 chunks 失败：{chunkError}</p> : null}
+        {chunkMessage ? <p className="success">{chunkMessage}</p> : null}
         {deleteError ? <p className="error">删除失败：{deleteError}</p> : null}
       </section>
 
@@ -397,6 +430,17 @@ export default function KnowledgePage() {
                       disabled={parsingDocumentId === document.id}
                     >
                       {parsingDocumentId === document.id ? "Starting..." : "Parse"}
+                    </button>
+                  ) : null}
+                  {canBuildChunks(document) ? (
+                    <button
+                      type="button"
+                      onClick={() => handleBuildChunks(document.id)}
+                      disabled={buildingChunksDocumentId === document.id}
+                    >
+                      {buildingChunksDocumentId === document.id
+                        ? "Building..."
+                        : "Build Chunks"}
                     </button>
                   ) : null}
                   <button

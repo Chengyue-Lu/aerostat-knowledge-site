@@ -18,7 +18,7 @@ Default URL: http://localhost:5173
 ## Pages
 
 - `/`: 首页，保留 Backend Health 卡片并请求 `${API_BASE_URL}/health`。
-- `/knowledge`: 知识库页，请求 `${API_BASE_URL}/documents` 并渲染文档元数据列表，支持上传 `.txt` / `.md` / `.pdf` 原始文档。
+- `/knowledge`: 知识库页，请求 `${API_BASE_URL}/documents` 并渲染文档元数据列表，支持上传 `.txt` / `.md` / `.pdf` 原始文档，并可对已解析文档触发 chunk 构建。
 - `/chat`: 问答占位页，提交问题到 `${API_BASE_URL}/chat` 并展示返回的 `reply`。
 
 ## Backend health check
@@ -51,6 +51,15 @@ The Knowledge page also supports deleting a document through:
 ```text
 DELETE ${API_BASE_URL}/documents/{document_id}
 ```
+
+For documents whose `parse_status` is `PARSED`, the Knowledge page shows a
+Build Chunks button. It posts to:
+
+```text
+${API_BASE_URL}/documents/{document_id}/chunks/build
+```
+
+The page refreshes the list after the backend updates `chunk_count`.
 
 Chat page posts JSON to `${API_BASE_URL}/chat`:
 

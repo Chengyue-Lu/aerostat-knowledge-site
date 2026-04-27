@@ -7,12 +7,20 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import inspect, select, text
 from sqlalchemy.orm import Session
 
+from .chunking import build_markdown_chunks
 from .database import Base, SessionLocal, engine, get_db
 from .mineru import get_document_output_dir
-from .models import Document
+from .models import Document, DocumentChunk
 from .parse_queue import enqueue_parse, start_parse_worker
 from .reconcile import reconcile_document_files
-from .schemas import ChatRequest, ChatResponse, DocumentCreate, DocumentRead, ParseResult
+from .schemas import (
+    ChatRequest,
+    ChatResponse,
+    DocumentChunkRead,
+    DocumentCreate,
+    DocumentRead,
+    ParseResult,
+)
 from .storage import save_raw_document_file
 
 
@@ -87,6 +95,29 @@ def cleanup_document_files(document: Document) -> None:
         parse_output_dir = Path(document.parse_output_dir).expanduser()
         if parse_output_dir.exists():
             shutil.rmtree(parse_output_dir)
+
+
+def ensure_parsed_markdown_ready(document: Document) -> Path:
+    if document.parse_status != "PARSED":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Document must have parse_status PARSED before building chunks.",
+        )
+
+    if not document.parsed_markdown_path:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Document has no parsed_markdown_path.",
+        )
+
+    markdown_path = Path(document.parsed_markdown_path).expanduser()
+    if not markdown_path.exists():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Parsed Markdown file not found: {document.parsed_markdown_path}",
+        )
+
+    return markdown_path
 
 
 @asynccontextmanager
@@ -190,6 +221,7 @@ def delete_document(document_id: int, db: Session = Depends(get_db)) -> dict[str
         raise HTTPException(status_code=404, detail="Document not found")
 
     cleanup_document_files(document)
+    db.query(DocumentChunk).filter(DocumentChunk.document_id == document_id).delete()
     db.delete(document)
     db.commit()
     return {"status": "deleted", "id": document_id}
@@ -260,6 +292,81 @@ def get_parse_result(document_id: int, db: Session = Depends(get_db)) -> ParseRe
         parsed_markdown_path=document.parsed_markdown_path,
         content=content,
     )
+
+
+@app.post("/documents/{document_id}/chunks/build", response_model=DocumentRead)
+def build_document_chunks(
+    document_id: int,
+    db: Session = Depends(get_db),
+) -> Document:
+    """Build SQLite chunks from a parsed Markdown artifact."""
+    document = db.get(Document, document_id)
+    if document is None:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    markdown_path = ensure_parsed_markdown_ready(document)
+    chunks = build_markdown_chunks(markdown_path)
+
+    db.query(DocumentChunk).filter(DocumentChunk.document_id == document_id).delete()
+    for chunk in chunks:
+        db.add(
+            DocumentChunk(
+                document_id=document_id,
+                chunk_index=chunk.chunk_index,
+                heading_path=chunk.heading_path,
+                heading_text=chunk.heading_text,
+                content=chunk.content,
+                char_count=chunk.char_count,
+                token_estimate=chunk.token_estimate,
+                source_path=chunk.source_path,
+            )
+        )
+
+    document.chunk_count = len(chunks)
+    db.commit()
+    db.refresh(document)
+    return document
+
+
+@app.get("/documents/{document_id}/chunks", response_model=list[DocumentChunkRead])
+def list_document_chunks(
+    document_id: int,
+    db: Session = Depends(get_db),
+) -> list[DocumentChunk]:
+    """Return chunks for a document ordered by chunk index."""
+    document = db.get(Document, document_id)
+    if document is None:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    return list(
+        db.scalars(
+            select(DocumentChunk)
+            .where(DocumentChunk.document_id == document_id)
+            .order_by(DocumentChunk.chunk_index.asc())
+        )
+    )
+
+
+@app.delete("/documents/{document_id}/chunks")
+def delete_document_chunks(
+    document_id: int,
+    db: Session = Depends(get_db),
+) -> dict[str, int | str]:
+    """Delete all chunks for a document and reset its chunk count."""
+    document = db.get(Document, document_id)
+    if document is None:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    deleted_count = db.query(DocumentChunk).filter(
+        DocumentChunk.document_id == document_id
+    ).delete()
+    document.chunk_count = 0
+    db.commit()
+    return {
+        "status": "deleted",
+        "document_id": document_id,
+        "deleted_count": deleted_count,
+    }
 
 
 @app.get("/documents/{document_id}", response_model=DocumentRead)

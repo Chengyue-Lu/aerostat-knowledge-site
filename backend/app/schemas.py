@@ -35,6 +35,21 @@ class DocumentRead(DocumentBase):
     updated_at: datetime
 
 
+class DocumentChunkRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    document_id: int
+    chunk_index: int
+    heading_path: str
+    heading_text: str | None = None
+    content: str
+    char_count: int
+    token_estimate: int | None = None
+    source_path: str | None = None
+    created_at: datetime
+
+
 class ChatRequest(BaseModel):
     question: str = ""
 

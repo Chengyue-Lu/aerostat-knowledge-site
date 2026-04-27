@@ -4,10 +4,10 @@
 
 这是一个浮空器知识网站第一版原型仓库，当前采用前后端分离结构：
 
-- backend: FastAPI 服务，提供健康检查、SQLite 文档元数据接口、原始文档上传接口、MinerU PDF 解析队列、文件一致性检查接口与占位问答接口。
+- backend: FastAPI 服务，提供健康检查、SQLite 文档元数据接口、原始文档上传接口、MinerU PDF 解析队列、Markdown chunk 构建接口、文件一致性检查接口与占位问答接口。
 - frontend: React + Vite 最小前端，包含首页、知识库页、问答页。
 
-当前已进入“MinerU 解析接入”阶段：文档列表从 SQLite 读取，支持注册 `.txt` / `.md` / `.pdf` 原始文件，PDF 可进入单 worker FIFO 队列调用本机独立 MinerU CLI 解析为 Markdown，并登记解析产物路径。本阶段仍不做 chunk 切分、向量库、LLM / embedding、认证、对象存储或 Celery/Redis/RQ。
+当前已进入“Markdown chunk 构建”阶段：文档列表从 SQLite 读取，支持注册 `.txt` / `.md` / `.pdf` 原始文件，PDF 可进入单 worker FIFO 队列调用本机独立 MinerU CLI 解析为 Markdown，并可从已解析 Markdown 构建结构化 chunks 保存到 SQLite。本阶段仍不做向量库、LLM / embedding、认证、对象存储或 Celery/Redis/RQ。
 
 ## 当前目录结构
 
@@ -63,6 +63,9 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 - `POST /documents/upload`: 上传 `.txt` / `.md` / `.pdf` 原始文件，并创建文档元数据记录。
 - `POST /documents/{document_id}/parse`: 将 PDF 文档加入 MinerU 单 worker 解析队列。
 - `GET /documents/{document_id}/parse-result`: 读取已解析出的 Markdown 内容。
+- `POST /documents/{document_id}/chunks/build`: 从已解析 Markdown 构建 SQLite chunks。
+- `GET /documents/{document_id}/chunks`: 读取文档 chunks。
+- `DELETE /documents/{document_id}/chunks`: 删除文档 chunks 并重置 `chunk_count`。
 - `GET /documents/{document_id}`: 读取单条文档元数据记录。
 - `DELETE /documents/{document_id}`: 删除文档元数据及本地原始文件、解析输出目录。
 - `GET /admin/reconcile/dry-run`: 检查数据库文件引用与本地文件系统是否一致，不自动修复。
@@ -86,11 +89,12 @@ npm run dev
 - 已完成第一版 SQLite 文档元数据持久化。
 - 已完成第一版 `.txt` / `.md` / `.pdf` 原始文档注册与本地存储。
 - 已完成第一版 MinerU PDF 后台解析接入和单 worker 排队。
+- 已完成第一版 Markdown chunk 构建，chunks 保存到 SQLite。
 - 已完成第一版解析队列重启恢复、文档删除和前端队列视图。
 - 已完成第一版数据库记录与本地文件系统 dry-run 一致性检查。
 - 已完成最小 React + Vite 前端骨架与三页面路由。
 - 首页保留 Backend Health 卡片，调用 `GET /health`。
-- Knowledge 页面调用 `GET /documents` 并展示 SQLite 文档元数据列表，支持上传 `.txt` / `.md` / `.pdf` 文件。
+- Knowledge 页面调用 `GET /documents` 并展示 SQLite 文档元数据列表，支持上传 `.txt` / `.md` / `.pdf` 文件，并可对已解析文档触发 chunk 构建。
 - Chat 页面提交问题到 `POST /chat` 并展示后端返回的 `reply`。
 - 前端 API 基地址支持 `VITE_API_BASE_URL` 环境变量，未设置时回退到 `http://localhost:8000`。
 - 后端已启用开发期 CORS（仅允许本地开发来源）。
