@@ -12,12 +12,14 @@ class DocumentBase(BaseModel):
     file_ext: str | None = None
     mime_type: str | None = None
     file_size: int | None = Field(default=None, ge=0)
+    page_count: int | None = Field(default=None, ge=0)
     sha256: str | None = None
     source_type: str | None = None
     chunk_count: int = Field(default=0, ge=0)
     parse_status: str = Field(default="NOT_PARSED", min_length=1)
     parse_output_dir: str | None = None
     parsed_markdown_path: str | None = None
+    parse_error_code: str | None = None
     parse_error: str | None = None
 
 

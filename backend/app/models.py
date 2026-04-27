@@ -22,6 +22,7 @@ class Document(Base):
     file_ext: Mapped[str | None] = mapped_column(String(20), nullable=True)
     mime_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
     file_size: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    page_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
     source_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
     chunk_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -32,6 +33,7 @@ class Document(Base):
     )
     parse_output_dir: Mapped[str | None] = mapped_column(String(500), nullable=True)
     parsed_markdown_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    parse_error_code: Mapped[str | None] = mapped_column(String(50), nullable=True)
     parse_error: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

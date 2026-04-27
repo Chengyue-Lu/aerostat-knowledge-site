@@ -38,17 +38,15 @@ export DATABASE_URL=sqlite:///./data/aerostat_knowledge.db
 export DOCS_RAW_DIR=./data/docs_raw
 export MINERU_BIN=mineru
 export MINERU_OUTPUT_DIR=./data/mineru_outputs
-export MINERU_TIMEOUT_SECONDS=1800
+export MINERU_TIMEOUT_SECONDS=21600
 # Optional. Leave unset to use MinerU default GPU/default route.
 # export MINERU_BACKEND=pipeline
 ```
 
 `backend/.env.example` is provided as a reference for local configuration.
 
-The app creates tables on startup with SQLAlchemy `create_all`. The first
-version also inserts three explicit seed documents only when the documents
-table is empty. The seed data lives in `backend/app/main.py` and can be removed
-later.
+The app creates tables on startup with SQLAlchemy `create_all`. It does not
+insert placeholder seed documents.
 
 ## Raw document storage
 
@@ -90,7 +88,7 @@ Environment variables:
 - `MINERU_BIN`: MinerU CLI path. Default: `mineru`
 - `MINERU_OUTPUT_DIR`: parse output root. Default: `backend/data/mineru_outputs/`
 - `MINERU_BACKEND`: optional backend argument. When set, backend calls `mineru ... -b <value>`. When unset, no `-b` is passed.
-- `MINERU_TIMEOUT_SECONDS`: subprocess timeout. Default: `1800`
+- `MINERU_TIMEOUT_SECONDS`: subprocess timeout. Default: `21600` seconds
 
 `POST /documents/{document_id}/parse` queues a PDF parse task and returns
 immediately. It does not wait for MinerU to finish. The backend uses one
@@ -116,6 +114,15 @@ Parse status values used by this version:
 - `PARSING`: currently running MinerU
 - `PARSED`: Markdown artifact was found and registered
 - `FAILED`: MinerU failed, timed out, or no Markdown artifact was found
+
+Timeout failures are stored with `parse_error_code` set to `TIMEOUT`. Other
+failure classes include `COMMAND_FAILED`, `NO_MARKDOWN`, `BINARY_NOT_FOUND`,
+`MISSING_SOURCE`, `INVALID_SOURCE`, `EXECUTION_ERROR`, and `INTERRUPTED`.
+
+The upload path stores `page_count` for PDF files using `pypdf`, with lightweight
+fallback detection if the parser cannot read the file. The frontend warns when a
+PDF has more than 20 pages because MinerU parsing may take significantly longer
+on weaker GPUs.
 
 MinerU command shape:
 
@@ -154,6 +161,27 @@ curl http://127.0.0.1:8000/admin/reconcile/dry-run
 ```bash
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
+
+When testing MinerU parsing, prefer running without `--reload`:
+
+```bash
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+`--reload` watches local files and can restart the backend while MinerU writes
+outputs under `data/mineru_outputs/`. A restart interrupts the in-memory parse
+queue and the app intentionally marks the interrupted `QUEUED` / `PARSING`
+document as `FAILED`.
+
+If reload is required for other backend work, exclude local data directories:
+
+```bash
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-exclude "data/*"
+```
+
+Local persistent configuration can be placed in `backend/.env`. This file is
+loaded automatically at startup and is ignored by git. Real environment
+variables still take precedence over values in `.env`.
 
 ## Development CORS
 
@@ -219,6 +247,8 @@ curl -X POST http://127.0.0.1:8000/chat \
 ]
 ```
 
+Documents are returned in stable `id` ascending order.
+
 `POST /documents` creates a document metadata record. It does not upload files
 or parse document content.
 
@@ -278,6 +308,19 @@ Example response:
 
 `GET /documents/{document_id}` returns one document metadata record or `404`
 when the id does not exist.
+
+`DELETE /documents/{document_id}` deletes one document metadata record and
+removes its local raw file and MinerU output directory when those paths exist:
+
+```bash
+curl -X DELETE http://127.0.0.1:8000/documents/4
+```
+
+Example response:
+
+```json
+{"status": "deleted", "id": 4}
+```
 
 `POST /documents/{document_id}/parse` queues MinerU parsing for a PDF document:
 

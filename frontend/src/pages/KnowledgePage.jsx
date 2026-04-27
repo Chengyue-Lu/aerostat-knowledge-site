@@ -3,6 +3,9 @@ import { API_BASE_URL } from "../config";
 
 const DOCUMENTS_URL = `${API_BASE_URL}/documents`;
 const DOCUMENT_UPLOAD_URL = `${DOCUMENTS_URL}/upload`;
+const REFRESH_INTERVAL_MS = 5000;
+const LARGE_DOCUMENT_PAGE_THRESHOLD = 20;
+const RUNNING_PARSE_STATUSES = new Set(["QUEUED", "PARSING"]);
 
 function formatError(error) {
   if (error instanceof Error) {
@@ -12,15 +15,59 @@ function formatError(error) {
   return "Request failed";
 }
 
-function formatDate(value) {
+function parseApiDate(value) {
   if (!value) {
+    return null;
+  }
+
+  const hasTimezone = /([zZ]|[+-]\d{2}:\d{2})$/.test(value);
+  const normalizedValue = hasTimezone ? value : `${value}Z`;
+  const parsedTime = new Date(normalizedValue).getTime();
+  return Number.isNaN(parsedTime) ? null : parsedTime;
+}
+
+function formatDate(value) {
+  const parsedTime = parseApiDate(value);
+  if (parsedTime === null) {
     return "";
   }
 
   return new Intl.DateTimeFormat("zh-CN", {
     dateStyle: "medium",
     timeStyle: "short",
-  }).format(new Date(value));
+  }).format(new Date(parsedTime));
+}
+
+function formatFileSize(value) {
+  if (value === null || value === undefined) {
+    return "";
+  }
+
+  if (value < 1024) {
+    return `${value} B`;
+  }
+
+  if (value < 1024 * 1024) {
+    return `${(value / 1024).toFixed(1)} KB`;
+  }
+
+  return `${(value / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function formatElapsed(startedAt, now) {
+  if (!startedAt) {
+    return "";
+  }
+
+  const startTime = parseApiDate(startedAt);
+  if (startTime === null) {
+    return "";
+  }
+
+  const elapsedSeconds = Math.max(0, Math.floor((now - startTime) / 1000));
+  const minutes = Math.floor(elapsedSeconds / 60);
+  const seconds = elapsedSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
 function hasSupportedExtension(file) {
@@ -38,6 +85,14 @@ function canParseDocument(document) {
   );
 }
 
+function isRunningParse(document) {
+  return RUNNING_PARSE_STATUSES.has(document.parse_status);
+}
+
+function isLargeDocument(document) {
+  return document.page_count && document.page_count > LARGE_DOCUMENT_PAGE_THRESHOLD;
+}
+
 export default function KnowledgePage() {
   const fileInputRef = useRef(null);
   const [documents, setDocuments] = useState([]);
@@ -48,11 +103,18 @@ export default function KnowledgePage() {
   const [uploadError, setUploadError] = useState("");
   const [uploadMessage, setUploadMessage] = useState("");
   const [parsingDocumentId, setParsingDocumentId] = useState(null);
+  const [deletingDocumentId, setDeletingDocumentId] = useState(null);
   const [parseMessage, setParseMessage] = useState("");
   const [parseError, setParseError] = useState("");
+  const [deleteError, setDeleteError] = useState("");
+  const [tick, setTick] = useState(Date.now());
 
-  async function fetchDocuments() {
-    setLoading(true);
+  const activeQueueDocuments = documents.filter(isRunningParse);
+
+  async function fetchDocuments({ showLoading = true } = {}) {
+    if (showLoading) {
+      setLoading(true);
+    }
 
     try {
       const response = await fetch(DOCUMENTS_URL);
@@ -104,6 +166,20 @@ export default function KnowledgePage() {
     };
   }, []);
 
+  useEffect(() => {
+    const refreshTimer = window.setInterval(() => {
+      fetchDocuments({ showLoading: false });
+    }, REFRESH_INTERVAL_MS);
+    const tickTimer = window.setInterval(() => {
+      setTick(Date.now());
+    }, 1000);
+
+    return () => {
+      window.clearInterval(refreshTimer);
+      window.clearInterval(tickTimer);
+    };
+  }, []);
+
   async function handleUpload(event) {
     event.preventDefault();
     setUploadError("");
@@ -139,7 +215,7 @@ export default function KnowledgePage() {
         fileInputRef.current.value = "";
       }
       setUploadMessage(`已上传：${data.filename || selectedFile.name}`);
-      await fetchDocuments();
+      await fetchDocuments({ showLoading: false });
     } catch (err) {
       setUploadError(formatError(err));
     } finally {
@@ -163,11 +239,38 @@ export default function KnowledgePage() {
       }
 
       setParseMessage(`已提交解析任务：${data.title || documentId}`);
-      await fetchDocuments();
+      await fetchDocuments({ showLoading: false });
     } catch (err) {
       setParseError(formatError(err));
     } finally {
       setParsingDocumentId(null);
+    }
+  }
+
+  async function handleDelete(document) {
+    const confirmed = window.confirm(`删除文档：${document.title}？`);
+    if (!confirmed) {
+      return;
+    }
+
+    setDeleteError("");
+    setDeletingDocumentId(document.id);
+
+    try {
+      const response = await fetch(`${DOCUMENTS_URL}/${document.id}`, {
+        method: "DELETE",
+      });
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data.detail || `HTTP ${response.status}`);
+      }
+
+      await fetchDocuments({ showLoading: false });
+    } catch (err) {
+      setDeleteError(formatError(err));
+    } finally {
+      setDeletingDocumentId(null);
     }
   }
 
@@ -208,6 +311,28 @@ export default function KnowledgePage() {
         {uploadMessage ? <p className="success">{uploadMessage}</p> : null}
         {parseError ? <p className="error">解析启动失败：{parseError}</p> : null}
         {parseMessage ? <p className="success">{parseMessage}</p> : null}
+        {deleteError ? <p className="error">删除失败：{deleteError}</p> : null}
+      </section>
+
+      <section className="card">
+        <div className="section-heading">
+          <h3>Parse Queue</h3>
+          <span className="badge">{activeQueueDocuments.length} active</span>
+        </div>
+
+        {activeQueueDocuments.length > 0 ? (
+          <ul className="queue-list">
+            {activeQueueDocuments.map((document) => (
+              <li key={document.id} className="queue-item">
+                <strong>{document.title}</strong>
+                <span>{document.parse_status}</span>
+                <span>耗时：{formatElapsed(document.updated_at, tick)}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="muted">当前没有排队或正在解析的文档。</p>
+        )}
       </section>
 
       <section className="card">
@@ -225,20 +350,47 @@ export default function KnowledgePage() {
           <ul className="document-list">
             {documents.map((document) => (
               <li key={document.id} className="document-item">
-                <strong>{document.title}</strong>
-                <span>分类：{document.category}</span>
-                <span>状态：{document.status}</span>
-                {document.parse_status ? (
-                  <span>解析状态：{document.parse_status}</span>
+                <div className="document-main">
+                  <div>
+                    <strong>{document.title}</strong>
+                    {document.filename ? <span>{document.filename}</span> : null}
+                  </div>
+                  <span className="document-id">ID {document.id}</span>
+                </div>
+
+                <div className="document-meta">
+                  <span>分类：{document.category}</span>
+                  <span>状态：{document.status}</span>
+                  <span>解析：{document.parse_status || "UNKNOWN"}</span>
+                  <span>分块：{document.chunk_count ?? 0}</span>
+                  {document.file_ext ? <span>类型：{document.file_ext}</span> : null}
+                  {document.file_size ? (
+                    <span>大小：{formatFileSize(document.file_size)}</span>
+                  ) : null}
+                  {document.page_count ? <span>页数：{document.page_count}</span> : null}
+                  {document.created_at ? (
+                    <span>创建：{formatDate(document.created_at)}</span>
+                  ) : null}
+                  {isRunningParse(document) ? (
+                    <span>耗时：{formatElapsed(document.updated_at, tick)}</span>
+                  ) : null}
+                </div>
+
+                {isLargeDocument(document) ? (
+                  <p className="document-warning">
+                    页数超过 {LARGE_DOCUMENT_PAGE_THRESHOLD} 页，MinerU 解析可能需要较长时间。
+                  </p>
                 ) : null}
-                {document.filename ? <span>文件名：{document.filename}</span> : null}
-                {document.source_type ? <span>来源：{document.source_type}</span> : null}
-                <span>分块数：{document.chunk_count ?? 0}</span>
-                {document.created_at ? (
-                  <span>创建时间：{formatDate(document.created_at)}</span>
+
+                {document.parse_error ? (
+                  <p className="document-error">
+                    {document.parse_error_code ? `${document.parse_error_code}: ` : null}
+                    {document.parse_error}
+                  </p>
                 ) : null}
-                {canParseDocument(document) ? (
-                  <div className="document-actions">
+
+                <div className="document-actions">
+                  {canParseDocument(document) ? (
                     <button
                       type="button"
                       onClick={() => handleParse(document.id)}
@@ -246,8 +398,16 @@ export default function KnowledgePage() {
                     >
                       {parsingDocumentId === document.id ? "Starting..." : "Parse"}
                     </button>
-                  </div>
-                ) : null}
+                  ) : null}
+                  <button
+                    type="button"
+                    className="danger-button"
+                    onClick={() => handleDelete(document)}
+                    disabled={deletingDocumentId === document.id || isRunningParse(document)}
+                  >
+                    {deletingDocumentId === document.id ? "Deleting..." : "Delete"}
+                  </button>
+                </div>
               </li>
             ))}
           </ul>

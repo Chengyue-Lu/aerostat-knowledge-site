@@ -1,9 +1,25 @@
 # Changelog
 
+## 2026-04-27
+
+### Fixes
+
+- Fix parse elapsed time display by treating backend timestamps without timezone as UTC.
+- Add automatic loading for local `backend/.env` configuration.
+- Persist local MinerU settings in `backend/.env` while keeping real environment variables higher priority.
+- Document why MinerU parsing should not be tested with `uvicorn --reload` unless `data/*` is excluded.
+- Increase default MinerU timeout to 21600 seconds for slower GPUs.
+- Add PDF `page_count` metadata using `pypdf` and frontend warnings for documents above 20 pages.
+- Add structured parse failure code `TIMEOUT` for MinerU timeout failures.
+
 ## 2026-04-26
 
 ### Backend
 
+- Stop inserting placeholder seed documents on startup.
+- Return `GET /documents` in stable `id` ascending order.
+- Add `DELETE /documents/{document_id}` to remove metadata, raw file, and MinerU output directory.
+- Recover stale in-memory parse queue state on startup by marking persisted `QUEUED` / `PARSING` documents as `FAILED`.
 - Add MinerU subprocess integration without installing MinerU into `backend/.venv`.
 - Add MinerU configuration environment variables:
   - `MINERU_BIN`
@@ -19,6 +35,10 @@
 
 ### Frontend
 
+- Rework the Knowledge page document list for clearer file rows.
+- Add a separate parse queue panel for `QUEUED` and `PARSING` documents.
+- Add 5-second refresh polling and live elapsed time display for active parse tasks.
+- Add document deletion controls.
 - Show a Parse button for PDF documents with `parse_status` `NOT_PARSED` or `FAILED`.
 - Submit parse requests from the Knowledge page and refresh the document list.
 

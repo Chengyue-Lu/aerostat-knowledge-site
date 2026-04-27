@@ -42,8 +42,15 @@ page shows a Parse button. It posts to:
 ${API_BASE_URL}/documents/{document_id}/parse
 ```
 
-The request only queues a backend MinerU task. The page refreshes the list after
-submission; it does not show a progress bar.
+The request only queues a backend MinerU task. The page refreshes the list every
+5 seconds and shows a separate queue panel with elapsed time for `QUEUED` and
+`PARSING` documents.
+
+The Knowledge page also supports deleting a document through:
+
+```text
+DELETE ${API_BASE_URL}/documents/{document_id}
+```
 
 Chat page posts JSON to `${API_BASE_URL}/chat`:
 

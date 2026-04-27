@@ -82,14 +82,62 @@ body {
 
 .document-item {
   display: grid;
-  gap: 0.25rem;
+  gap: 0.75rem;
   padding: 0.85rem;
   border: 1px solid #ececec;
   border-radius: 8px;
   background: #fbfbfb;
 }
 
+.document-main {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 1rem;
+}
+
+.document-main > div {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.document-main span {
+  color: #666666;
+}
+
+.document-id {
+  white-space: nowrap;
+  font-size: 0.9rem;
+}
+
+.document-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.8rem;
+  color: #444444;
+}
+
+.document-meta span {
+  padding: 0.1rem 0.45rem;
+  border: 1px solid #eeeeee;
+  border-radius: 999px;
+  background: #ffffff;
+}
+
+.document-error {
+  margin: 0;
+  color: #b42318;
+}
+
+.document-warning {
+  margin: 0;
+  color: #8a5a00;
+}
+
 .document-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
   margin-top: 0.5rem;
 }
 
@@ -107,6 +155,29 @@ body {
 .document-actions button:disabled {
   cursor: not-allowed;
   opacity: 0.65;
+}
+
+.danger-button {
+  background: #b42318 !important;
+}
+
+.queue-list {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0;
+  margin: 1rem 0 0;
+  list-style: none;
+}
+
+.queue-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid #ececec;
+  border-radius: 8px;
+  background: #fbfbfb;
 }
 
 .upload-form {

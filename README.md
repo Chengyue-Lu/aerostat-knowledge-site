@@ -29,11 +29,19 @@ python -m pip install -r requirements.txt
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
+测试 MinerU 解析时建议不要使用 `--reload`，避免 MinerU 写入
+`backend/data/mineru_outputs/` 触发后端重启并中断内存队列：
+
+```bash
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
 默认 SQLite 数据库：
 
 - 未设置 `DATABASE_URL` 时，后端使用 `sqlite:///./data/aerostat_knowledge.db`。
 - 从 `backend/` 目录启动时，对应文件为 `backend/data/aerostat_knowledge.db`。
 - 可参考 `backend/.env.example` 设置 `DATABASE_URL`。
+- 本地持久配置可写入 `backend/.env`，启动时会自动读取；真实环境变量优先级更高。
 
 默认原始文档目录：
 
@@ -44,6 +52,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
 - 未设置 `MINERU_OUTPUT_DIR` 时，后端使用 `backend/data/mineru_outputs/`。
 - 未设置 `MINERU_BACKEND` 时，后端不会向 MinerU CLI 传 `-b`。
+- `MINERU_TIMEOUT_SECONDS` 默认是 `21600` 秒。
 - `POST /documents/{document_id}/parse` 是后台慢任务入口，不等待解析结束。
 
 常用接口：
@@ -55,6 +64,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 - `POST /documents/{document_id}/parse`: 将 PDF 文档加入 MinerU 单 worker 解析队列。
 - `GET /documents/{document_id}/parse-result`: 读取已解析出的 Markdown 内容。
 - `GET /documents/{document_id}`: 读取单条文档元数据记录。
+- `DELETE /documents/{document_id}`: 删除文档元数据及本地原始文件、解析输出目录。
 - `GET /admin/reconcile/dry-run`: 检查数据库文件引用与本地文件系统是否一致，不自动修复。
 - `POST /chat`: 返回占位问答回复和空 sources 列表。
 
@@ -76,6 +86,7 @@ npm run dev
 - 已完成第一版 SQLite 文档元数据持久化。
 - 已完成第一版 `.txt` / `.md` / `.pdf` 原始文档注册与本地存储。
 - 已完成第一版 MinerU PDF 后台解析接入和单 worker 排队。
+- 已完成第一版解析队列重启恢复、文档删除和前端队列视图。
 - 已完成第一版数据库记录与本地文件系统 dry-run 一致性检查。
 - 已完成最小 React + Vite 前端骨架与三页面路由。
 - 首页保留 Backend Health 卡片，调用 `GET /health`。

@@ -4,12 +4,15 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
+from .config import load_env_file
 from .database import SessionLocal
 from .models import Document
 
 
+load_env_file()
+
 DEFAULT_MINERU_OUTPUT_DIR = Path(__file__).resolve().parents[1] / "data" / "mineru_outputs"
-DEFAULT_MINERU_TIMEOUT_SECONDS = 1800
+DEFAULT_MINERU_TIMEOUT_SECONDS = 21600
 MAX_PARSE_ERROR_LENGTH = 900
 
 
@@ -89,9 +92,16 @@ def _failure_message(prefix: str, stdout: str = "", stderr: str = "") -> str:
     return _truncate_error(prefix)
 
 
-def _mark_failed(db: Session, document: Document, message: str, output_dir: Path) -> None:
+def _mark_failed(
+    db: Session,
+    document: Document,
+    message: str,
+    output_dir: Path,
+    error_code: str,
+) -> None:
     document.parse_status = "FAILED"
     document.parse_output_dir = str(output_dir)
+    document.parse_error_code = error_code
     document.parse_error = _truncate_error(message)
     db.commit()
 
@@ -105,16 +115,23 @@ def run_mineru_parse(document_id: int) -> None:
         output_dir = get_document_output_dir(document_id)
         document.parse_status = "PARSING"
         document.parse_output_dir = str(output_dir)
+        document.parse_error_code = None
         document.parse_error = None
         db.commit()
 
         if not document.storage_path:
-            _mark_failed(db, document, "Document has no storage_path.", output_dir)
+            _mark_failed(db, document, "Document has no storage_path.", output_dir, "INVALID_SOURCE")
             return
 
         storage_path = Path(document.storage_path).expanduser().resolve()
         if not storage_path.exists():
-            _mark_failed(db, document, f"Original file not found: {storage_path}", output_dir)
+            _mark_failed(
+                db,
+                document,
+                f"Original file not found: {storage_path}",
+                output_dir,
+                "MISSING_SOURCE",
+            )
             return
 
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -137,13 +154,19 @@ def run_mineru_parse(document_id: int) -> None:
                 stdout=exc.stdout or "",
                 stderr=exc.stderr or "",
             )
-            _mark_failed(db, document, message, output_dir)
+            _mark_failed(db, document, message, output_dir, "TIMEOUT")
             return
         except FileNotFoundError:
-            _mark_failed(db, document, f"MinerU binary not found: {get_mineru_bin()}", output_dir)
+            _mark_failed(
+                db,
+                document,
+                f"MinerU binary not found: {get_mineru_bin()}",
+                output_dir,
+                "BINARY_NOT_FOUND",
+            )
             return
         except OSError as exc:
-            _mark_failed(db, document, f"MinerU execution failed: {exc}", output_dir)
+            _mark_failed(db, document, f"MinerU execution failed: {exc}", output_dir, "EXECUTION_ERROR")
             return
 
         if result.returncode != 0:
@@ -152,7 +175,7 @@ def run_mineru_parse(document_id: int) -> None:
                 stdout=result.stdout,
                 stderr=result.stderr,
             )
-            _mark_failed(db, document, message, output_dir)
+            _mark_failed(db, document, message, output_dir, "COMMAND_FAILED")
             return
 
         markdown_path = find_parsed_markdown(output_dir)
@@ -162,11 +185,12 @@ def run_mineru_parse(document_id: int) -> None:
                 stdout=result.stdout,
                 stderr=result.stderr,
             )
-            _mark_failed(db, document, message, output_dir)
+            _mark_failed(db, document, message, output_dir, "NO_MARKDOWN")
             return
 
         document.parse_status = "PARSED"
         document.parse_output_dir = str(output_dir)
         document.parsed_markdown_path = str(markdown_path)
+        document.parse_error_code = None
         document.parse_error = None
         db.commit()

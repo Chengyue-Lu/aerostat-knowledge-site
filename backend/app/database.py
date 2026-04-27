@@ -4,6 +4,10 @@ from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
+from .config import load_env_file
+
+
+load_env_file()
 
 DEFAULT_DATABASE_URL = "sqlite:///./data/aerostat_knowledge.db"
 DATABASE_URL = os.getenv("DATABASE_URL", DEFAULT_DATABASE_URL)

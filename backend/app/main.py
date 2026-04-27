@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
+import shutil
 
 from fastapi import Depends, FastAPI, File, HTTPException, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,46 +20,10 @@ STALE_PARSE_ERROR = (
     "Parser task was interrupted by backend restart. Please submit parse again."
 )
 
-SEED_DOCUMENTS = [
-    {
-        "title": "浮空器基础概念占位文档",
-        "category": "基础知识",
-        "status": "seed",
-        "filename": "aerostat-basics-placeholder.md",
-        "source_type": "seed",
-        "chunk_count": 0,
-    },
-    {
-        "title": "系留气球应用场景占位文档",
-        "category": "应用场景",
-        "status": "seed",
-        "filename": "tethered-balloon-use-cases-placeholder.md",
-        "source_type": "seed",
-        "chunk_count": 0,
-    },
-    {
-        "title": "飞行安全与维护占位文档",
-        "category": "安全维护",
-        "status": "seed",
-        "filename": "flight-safety-maintenance-placeholder.md",
-        "source_type": "seed",
-        "chunk_count": 0,
-    },
-]
-
-
 def init_database() -> None:
     Base.metadata.create_all(bind=engine)
     ensure_document_columns()
     recover_stale_parse_tasks()
-
-    with SessionLocal() as db:
-        has_documents = db.scalars(select(Document.id).limit(1)).first() is not None
-        if has_documents:
-            return
-
-        db.add_all(Document(**document) for document in SEED_DOCUMENTS)
-        db.commit()
 
 
 def ensure_document_columns() -> None:
@@ -72,6 +37,7 @@ def ensure_document_columns() -> None:
         "file_ext": "ALTER TABLE documents ADD COLUMN file_ext VARCHAR(20)",
         "mime_type": "ALTER TABLE documents ADD COLUMN mime_type VARCHAR(100)",
         "file_size": "ALTER TABLE documents ADD COLUMN file_size INTEGER",
+        "page_count": "ALTER TABLE documents ADD COLUMN page_count INTEGER",
         "sha256": "ALTER TABLE documents ADD COLUMN sha256 VARCHAR(64)",
         "parse_status": (
             "ALTER TABLE documents ADD COLUMN parse_status "
@@ -81,6 +47,7 @@ def ensure_document_columns() -> None:
         "parsed_markdown_path": (
             "ALTER TABLE documents ADD COLUMN parsed_markdown_path VARCHAR(500)"
         ),
+        "parse_error_code": "ALTER TABLE documents ADD COLUMN parse_error_code VARCHAR(50)",
         "parse_error": "ALTER TABLE documents ADD COLUMN parse_error VARCHAR(1000)",
     }
 
@@ -100,9 +67,26 @@ def recover_stale_parse_tasks() -> None:
 
         for document in stale_documents:
             document.parse_status = "FAILED"
+            document.parse_error_code = "INTERRUPTED"
             document.parse_error = STALE_PARSE_ERROR
 
         db.commit()
+
+
+def cleanup_document_files(document: Document) -> None:
+    if document.storage_path:
+        storage_path = Path(document.storage_path).expanduser()
+        if storage_path.is_file():
+            storage_path.unlink()
+            try:
+                storage_path.parent.rmdir()
+            except OSError:
+                pass
+
+    if document.parse_output_dir:
+        parse_output_dir = Path(document.parse_output_dir).expanduser()
+        if parse_output_dir.exists():
+            shutil.rmtree(parse_output_dir)
 
 
 @asynccontextmanager
@@ -138,7 +122,7 @@ def health() -> dict[str, str]:
 @app.get("/documents", response_model=list[DocumentRead])
 def list_documents(db: Session = Depends(get_db)) -> list[Document]:
     """Return document metadata stored in SQLite."""
-    return list(db.scalars(select(Document).order_by(Document.created_at.desc())))
+    return list(db.scalars(select(Document).order_by(Document.id.asc())))
 
 
 @app.post(
@@ -180,6 +164,7 @@ def upload_document(
         file_ext=saved_file.file_ext,
         mime_type=saved_file.mime_type,
         file_size=saved_file.file_size,
+        page_count=saved_file.page_count,
         sha256=saved_file.sha256,
         source_type="upload",
         chunk_count=0,
@@ -195,6 +180,19 @@ def upload_document(
 def reconcile_dry_run(db: Session = Depends(get_db)) -> dict[str, list[dict]]:
     """Check database file references against local storage without modifying data."""
     return reconcile_document_files(db)
+
+
+@app.delete("/documents/{document_id}")
+def delete_document(document_id: int, db: Session = Depends(get_db)) -> dict[str, int | str]:
+    """Delete a document metadata record and its local raw/parse artifacts."""
+    document = db.get(Document, document_id)
+    if document is None:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    cleanup_document_files(document)
+    db.delete(document)
+    db.commit()
+    return {"status": "deleted", "id": document_id}
 
 
 @app.post("/documents/{document_id}/parse", response_model=DocumentRead)
@@ -233,6 +231,7 @@ def parse_document(
     document.parse_status = "QUEUED"
     document.parse_output_dir = str(get_document_output_dir(document_id))
     document.parsed_markdown_path = None
+    document.parse_error_code = None
     document.parse_error = None
     db.commit()
     db.refresh(document)
